@@ -1,0 +1,48 @@
+TensorFlow GPU (Windows에서 현재 PC로 바로 쓰기 어려운 이유)
+================================================================
+
+확인 결과:
+- NVIDIA GPU (예: RTX 3060) + 드라이버는 정상일 수 있음.
+- 그러나 TensorFlow 2.11 이상은 "Windows 네이티브(PowerShell/CMD)"에서 CUDA GPU를
+  사용하지 않도록 되어 있음 (TensorFlow 실행 시 경고로도 출력됨).
+- pip install tensorflow[and-cuda] 는 Windows용 휠에서 NCCL 등 의존성 때문에
+  일반적으로 설치되지 않음.
+
+따라서 "같은 test1.py 코드"로 GPU 학습을 쓰려면 아래 중 하나가 필요합니다.
+
+--------------------------------------------------------------------
+방법 A: WSL2 + Ubuntu (권장)
+--------------------------------------------------------------------
+1) PowerShell(관리자):  wsl --install
+   재부팅 후 Microsoft Store에서 "Ubuntu" 설치·실행
+
+2) Ubuntu 안에서 NVIDIA CUDA on WSL이 동작하는지 확인
+   (Windows에 최신 NVIDIA 드라이버 설치되어 있으면 WSL에서 GPU가 보이는 경우가 많음)
+   명령:  nvidia-smi
+
+3) 프로젝트 폴더로 이동 (Windows 경로는 /mnt/c/... )
+   예:  cd /mnt/c/Users/mbc/Desktop/python
+
+4) 가상환경 + 패키지
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -U pip
+   pip install tensorflow pandas scikit-learn matplotlib numpy joblib
+
+5) GPU 인식 확인
+   python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+
+6) 학습 실행
+   python3 test1.py
+
+--------------------------------------------------------------------
+방법 B: Windows에서 그대로 쓰기
+--------------------------------------------------------------------
+- 현재처럼 CPU로 학습·추론 (느리지만 동작은 동일).
+- 데이터/모델이 작으면 CPU로도 충분한 경우가 많음.
+
+--------------------------------------------------------------------
+참고
+--------------------------------------------------------------------
+- 공식 문서: https://www.tensorflow.org/install/pip
+- sklearn 트리(DecisionTree, ExtraTrees)는 GPU 미사용(항상 CPU).

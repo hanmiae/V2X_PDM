@@ -1,0 +1,26 @@
+@import './base.css';
+
+/* Vue 기본 템플릿의 max-width/grid 제거 — 전체 화면 대시보드용 */
+#app {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-weight: normal;
+}
+
+/* 전역 a 스타일은 사이드바·네비를 깨뜨리므로 로그인/회원가입·본문만 적용 */
+.green,
+.login-card-box a,
+.register-footer a {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  .login-card-box a:hover,
+  .register-footer a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}

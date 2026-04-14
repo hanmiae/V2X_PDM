@@ -1,0 +1,11 @@
+# Windows: 공식 pip 패키지 tensorflow 는 CPU에서 안정 동작(2.11+ 네이티브 CUDA 미지원).
+# GPU(CUDA)는 WSL2 Linux 권장 — docs/GPU_SETUP_WSL.txt
+tensorflow>=2.15,<2.19
+tensorflow-model-optimization>=0.8.0
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.3
+joblib>=1.3
+matplotlib>=3.8
+kafka-python>=2.0.2
+pyspark>=3.5.0
