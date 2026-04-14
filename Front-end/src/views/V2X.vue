@@ -1,5 +1,5 @@
 <template>
-  <div class="v2x-view">
+  <div class="v2x-view" :class="{ 'dark-theme': isDarkMode }">
     <div class="header">
       <div class="title-wrap">
         <h2>📡 V2X 통신 실시간 관리</h2>
@@ -39,10 +39,10 @@
     </div>
 
     <div class="v2x-card chart-section">
-      <h3>📈 최근 24시간 통신 지연(Latency) 변동 추이</h3>
+      <h3>📈 최근 1시간 통신 지연(Latency) 변동 추이 (10분 단위)</h3>
       <div class="chart-inner-bg">
         <div class="chart-container">
-          <svg viewBox="0 0 700 120" class="v2x-svg">
+          <svg viewBox="0 0 700 120" class="v2x-svg" preserveAspectRatio="none">
             <line
               v-for="i in 4"
               :key="'grid-' + i"
@@ -53,14 +53,15 @@
               stroke="rgba(200, 200, 200, 0.1)"
               stroke-width="1"
             />
-            <path :d="chartPath" fill="none" stroke="#3498db" stroke-width="4" class="path-anim" />
+            <path :d="chartPath" fill="none" stroke="#3498db" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" class="path-anim" />
             <g v-for="(p, i) in historyPoints" :key="i">
               <circle :cx="p.x" :cy="p.y" r="5" :fill="p.val > 60 ? '#e74c3c' : '#3498db'" />
             </g>
           </svg>
           <div class="chart-labels">
-            <span>20시</span><span>00시</span><span>04시</span><span>08시</span><span>12시</span
-            ><span>16시</span><span>현재</span>
+            <span v-for="label in chartLabels" :key="label" :class="{ today: label === '현재' }">
+              {{ label }}
+            </span>
           </div>
         </div>
       </div>
@@ -110,11 +111,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import api from '@/api'
 
+const isDarkMode = inject('isDarkMode', ref(false))
 const currentTime = ref(new Date().toLocaleString())
 let timer = null
+let dataTimer = null // 실시간 데이터 갱신용 타이머
 
 const intersectionList = [
   { id: 'ICN-01', name: '인천시청입구 삼거리' },
@@ -135,8 +138,9 @@ const commLog = ref({
   connected_vehicle_count: 0,
 })
 
-const historyData = ref([])
+const historyData = ref([0, 0, 0, 0, 0, 0, 0])
 const logHistory = ref([])
+const chartLabels = ref([]) // 1시간 단위 동적 라벨
 
 const totalPages = computed(() => Math.ceil(logHistory.value.length / itemsPerPage) || 1)
 const paginatedLogs = computed(() => {
@@ -152,10 +156,16 @@ const nextPage = () => {
   if (currentPage.value < totalPages.value) currentPage.value++
 }
 
+// 수정: 최근 1시간(7개 포인트)에 맞춰 X 좌표 분배
 const historyPoints = computed(() => {
+  const totalWidth = 700;
+  const sidePadding = 30; // 양옆 여백
+  const usableWidth = totalWidth - (sidePadding * 2);
+  const dataLen = historyData.value.length || 7;
+
   return historyData.value.map((val, idx) => ({
-    x: idx * 100 + 50,
-    y: 100 - val * 0.8,
+    x: sidePadding + (usableWidth / (dataLen - 1)) * idx,
+    y: 100 - (val * 0.8), // Latency 값에 따른 Y 좌표
     val: val,
   }))
 })
@@ -170,7 +180,22 @@ const calculateSuccessRate = computed(() => {
   return (((total - fail) / total) * 100).toFixed(2)
 })
 
+// 추가: 1시간 전까지의 10분 단위 라벨 생성
+const updateChartLabels = () => {
+  const labels = [];
+  const now = new Date();
+  for (let i = 6; i >= 1; i--) {
+    const time = new Date(now.getTime() - i * 10 * 60 * 1000);
+    const hh = time.getHours().toString().padStart(2, '0');
+    const mm = time.getMinutes().toString().padStart(2, '0');
+    labels.push(`${hh}:${mm}`);
+  }
+  labels.push('현재');
+  chartLabels.value = labels;
+}
+
 const updateData = async () => {
+  updateChartLabels();
   try {
     const id = selectedId.value
     const [sumRes, histRes, logsRes] = await Promise.all([
@@ -180,27 +205,32 @@ const updateData = async () => {
     ])
     const s = sumRes.data
     commLog.value = {
-      v2x_device_id: s.deviceId ?? '',
-      spat_send_count: Math.max(1, s.spatSendCount ?? 1),
-      spat_fail_count: s.spatFailCount ?? 0,
-      avg_latency_ms: s.avgLatencyMs ?? 0,
+      v2x_device_id: s.deviceId ?? s.v2x_device_id ?? '',
+      spat_send_count: Math.max(1, s.spatSendCount ?? s.spat_send_count ?? 1),
+      spat_fail_count: s.spatFailCount ?? s.spat_fail_count ?? 0,
+      avg_latency_ms: s.avgLatencyMs ?? s.avg_latency_ms ?? 0,
       comm_fail_count: 0,
-      connected_vehicle_count: s.connectedVehicleCount ?? 0,
+      connected_vehicle_count: s.connectedVehicleCount ?? s.connected_vehicle_count ?? 0,
     }
     const rows = logsRes.data ?? []
     if (rows.length) {
-      commLog.value.comm_fail_count = rows[0].commFailCount ?? 0
+      commLog.value.comm_fail_count = rows[0].commFailCount ?? rows[0].comm_fail_count ?? 0
     }
-    historyData.value = histRes.data.map((h) => h.latency)
+
+    // 최근 1시간 이력 (최대 7개)
+    if (histRes.data) {
+      const latencies = histRes.data.map((h) => h.latency ?? h.avg_latency_ms ?? 0);
+      historyData.value = latencies.length >= 7 ? latencies.slice(-7) : [...Array(7 - latencies.length).fill(0), ...latencies];
+    }
+
     logHistory.value = rows.map((log) => ({
-      v2x_log_time: log.v2xLogTime,
-      spat_send_count: log.spatSendCount,
-      spat_fail_count: log.spatFailCount,
-      avg_latency_ms: log.avgLatencyMs,
-      comm_fail_count: log.commFailCount,
-      connected_vehicle_count: log.connectedVehicleCount,
+      v2x_log_time: log.v2xLogTime ?? log.v2x_log_time,
+      spat_send_count: log.spatSendCount ?? log.spat_send_count,
+      spat_fail_count: log.spatFailCount ?? log.spat_fail_count,
+      avg_latency_ms: log.avgLatencyMs ?? log.avg_latency_ms,
+      comm_fail_count: log.commFailCount ?? log.comm_fail_count,
+      connected_vehicle_count: log.connectedVehicleCount ?? log.connected_vehicle_count,
     }))
-    currentPage.value = 1
   } catch (error) {
     console.error('V2X API 오류:', error)
   }
@@ -212,14 +242,18 @@ onMounted(() => {
   timer = setInterval(() => {
     currentTime.value = new Date().toLocaleString()
   }, 1000)
+
+  // 5초마다 실시간 데이터 갱신
+  dataTimer = setInterval(updateData, 5000);
 })
+
 onUnmounted(() => {
-  clearInterval(timer)
+  if (timer) clearInterval(timer)
+  if (dataTimer) clearInterval(dataTimer)
 })
 </script>
 
 <style scoped>
-/* [라이트모드 및 공통 레이아웃 - 기존 유지] */
 .v2x-view {
   display: flex;
   flex-direction: column;
@@ -262,20 +296,10 @@ onUnmounted(() => {
   display: block;
   margin: 4px 0;
 }
-.val.blue {
-  color: #3498db;
-}
-.val.green {
-  color: #2ecc71;
-}
-.val.orange {
-  color: #e67e22;
-}
-.val small {
-  font-size: 14px;
-  margin-left: 4px;
-  color: #888;
-}
+.val.blue { color: #3498db; }
+.val.green { color: #2ecc71; }
+.val.orange { color: #e67e22; }
+.val small { font-size: 14px; margin-left: 4px; color: #888; }
 
 .chart-section {
   flex-shrink: 0;
@@ -290,11 +314,12 @@ onUnmounted(() => {
 .chart-labels {
   display: flex;
   justify-content: space-between;
-  padding: 0 45px;
+  padding: 0 30px; /* 수정: sidePadding(30)과 일치 */
   font-size: 11px;
   color: #bbb;
-  margin-top: 5px;
+  margin-top: 10px;
 }
+.chart-labels .today { color: #3498db; font-weight: bold; }
 
 .table-card {
   flex: 0 1 auto;
@@ -343,62 +368,22 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-/* ==========================================================
-   🌑 다크모드 (이미지와 동일하게 수정)
-   ========================================================= */
-
-.dark-theme .v2x-view {
-  background: #535151 !important;
-}
-
+/* 🌑 다크모드 대응 */
+.dark-theme .v2x-view { background: #535151 !important; }
 .dark-theme .v2x-card {
   background: #1e1e1e !important;
   color: #eee;
   border: 1px solid #2c2c2c;
   box-shadow: 0 10px 12px rgba(0, 0, 0, 0.4);
 }
-
-/* 💡 상하 라인 일치 수정: 헤더 하단과 테이블 카드 상단에 동일한 디자인 적용 */
-.dark-theme .header {
-  border-bottom: 2px solid #7e7e7e !important;
-}
-
-.dark-theme .table-card {
-  border-top: 1px solid #333 !important;
-}
-
-/* 다크모드 글자색 일치 */
+.dark-theme .header { border-bottom: 2px solid #7e7e7e !important; }
 .dark-theme .header h2,
 .dark-theme .header p,
 .dark-theme .header strong,
 .dark-theme .selector-group label,
-.dark-theme h3 {
-  color: #ffffff !important;
-}
-
-/* 테이블 내부 */
-.dark-theme .log-table th {
-  background: #252525;
-  color: #bbb;
-  border-bottom: 1px solid #333;
-}
-.dark-theme .log-table td {
-  border-bottom: 1px solid #2a2a2a;
-  color: #ddd;
-}
-.dark-theme .log-table {
-  border-bottom: 1px solid #333;
-}
-
-/* 입력 요소 */
+.dark-theme h3 { color: #ffffff !important; }
+.dark-theme .log-table th { background: #252525; color: #bbb; border-bottom: 1px solid #333; }
+.dark-theme .log-table td { border-bottom: 1px solid #2a2a2a; color: #ddd; }
 .dark-theme .intersection-select,
-.dark-theme .page-btn {
-  background: #252525;
-  border: 1px solid #444;
-  color: #eee;
-}
-.dark-theme .page-btn:disabled {
-  background: #1e1e1e;
-  color: #555;
-}
+.dark-theme .page-btn { background: #252525; border: 1px solid #444; color: #eee; }
 </style>
