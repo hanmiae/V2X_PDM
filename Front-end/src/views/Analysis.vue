@@ -92,21 +92,21 @@
 
     <div class="detail-analysis-grid">
       <div class="detail-card">
-        <h3>🚥 제어기 상태 ({{ controllerLog.device_id }})</h3>
+        <h3>🚥 제어기 상태 ({{ controllerLog.deviceId }})</h3>
         <div class="metrics-grid">
-          <div class="metric-item"><span>CPU 온도</span><strong>{{ controllerLog.cpu_temp }}°C</strong></div>
-          <div class="metric-item"><span>응답 속도</span><strong>{{ controllerLog.response_time_ms }}ms</strong></div>
-          <div class="metric-item"><span>가동 시간</span><strong>{{ Math.floor(controllerLog.uptime_min / 60) }}h</strong></div>
-          <div class="metric-item"><span>에러 건수</span><strong class="text-warning">{{ controllerLog.error_count }}</strong></div>
+          <div class="metric-item"><span>CPU 온도</span><strong>{{ controllerLog.cpuTemp }}°C</strong></div>
+          <div class="metric-item"><span>응답 속도</span><strong>{{ controllerLog.responseTimeMs }}ms</strong></div>
+          <div class="metric-item"><span>가동 시간</span><strong>{{ controllerUptimeHours }}h</strong></div>
+          <div class="metric-item"><span>에러 건수</span><strong class="text-warning">{{ controllerLog.errorCount }}</strong></div>
         </div>
       </div>
       <div class="detail-card">
-        <h3>📡 V2X 품질 ({{ commLog.device_id }})</h3>
+        <h3>📡 V2X 품질 ({{ commLog.deviceId }})</h3>
         <div class="metrics-grid">
-          <div class="metric-item"><span>평균 지연</span><strong>{{ commLog.avg_latency_ms }}ms</strong></div>
-          <div class="metric-item"><span>차량 접속</span><strong>{{ commLog.connected_vehicle_count }}</strong></div>
-          <div class="metric-item"><span>통신 실패</span><strong class="text-danger">{{ commLog.comm_fail_count }}</strong></div>
-          <div class="metric-item"><span>성공률</span><strong>{{ ((1 - commLog.spat_fail_count / commLog.spat_send_count) * 100).toFixed(1) }}%</strong></div>
+          <div class="metric-item"><span>평균 지연</span><strong>{{ commLog.avgLatencyMs }}ms</strong></div>
+          <div class="metric-item"><span>차량 접속</span><strong>{{ commLog.connectedVehicleCount }}</strong></div>
+          <div class="metric-item"><span>통신 실패</span><strong class="text-danger">{{ commLog.commFailCount }}</strong></div>
+          <div class="metric-item"><span>성공률</span><strong>{{ v2xSpatSuccessPercent }}</strong></div>
         </div>
       </div>
     </div>
@@ -136,9 +136,52 @@ const selectedId = ref('ICN-03')
 const chartLabels = ref([])
 
 const riskData = ref({ total_risk_score: 0, controller_risk_score: 0, v2x_risk_score: 0, risk_level: '정상', remain_days: 0, fail_prob: 0, analysis_comment: '' })
-const controllerLog = ref({ device_id: '-', cpu_temp: 0, response_time_ms: 0, uptime_min: 0, error_count: 0 })
-const commLog = ref({ device_id: '-', spat_send_count: 1, spat_fail_count: 0, avg_latency_ms: 0, comm_fail_count: 0, connected_vehicle_count: 0 })
+const controllerLog = ref({ deviceId: '-', cpuTemp: 0, responseTimeMs: 0, uptimeMin: 0, errorCount: 0 })
+const commLog = ref({ deviceId: '-', spatSendCount: 0, spatFailCount: 0, avgLatencyMs: 0, commFailCount: 0, connectedVehicleCount: 0 })
 const currentHistory = ref([0, 0, 0, 0, 0, 0, 0])
+
+/** 백엔드 DTO는 camelCase; snake_case 응답도 허용 */
+function normalizeControllerStatus(d) {
+  if (!d || typeof d !== 'object') {
+    return { deviceId: '-', cpuTemp: 0, responseTimeMs: 0, uptimeMin: 0, errorCount: 0 }
+  }
+  return {
+    deviceId: d.deviceId ?? d.device_id ?? '-',
+    cpuTemp: Number(d.cpuTemp ?? d.cpu_temp ?? 0),
+    responseTimeMs: Number(d.responseTimeMs ?? d.response_time_ms ?? 0),
+    uptimeMin: Number(d.uptimeMin ?? d.uptime_min ?? 0),
+    errorCount: Number(d.errorCount ?? d.error_count ?? 0),
+  }
+}
+
+function normalizeV2xStatus(d) {
+  if (!d || typeof d !== 'object') {
+    return { deviceId: '-', spatSendCount: 0, spatFailCount: 0, avgLatencyMs: 0, commFailCount: 0, connectedVehicleCount: 0 }
+  }
+  return {
+    deviceId: d.deviceId ?? d.device_id ?? '-',
+    spatSendCount: Number(d.spatSendCount ?? d.spat_send_count ?? 0),
+    spatFailCount: Number(d.spatFailCount ?? d.spat_fail_count ?? 0),
+    avgLatencyMs: Number(d.avgLatencyMs ?? d.avg_latency_ms ?? 0),
+    commFailCount: Number(d.commFailCount ?? d.comm_fail_count ?? 0),
+    connectedVehicleCount: Number(d.connectedVehicleCount ?? d.connected_vehicle_count ?? 0),
+  }
+}
+
+const controllerUptimeHours = computed(() => {
+  const min = controllerLog.value.uptimeMin
+  if (min == null || Number.isNaN(min)) return 0
+  return Math.floor(min / 60)
+})
+
+const v2xSpatSuccessPercent = computed(() => {
+  const send = commLog.value.spatSendCount
+  const fail = commLog.value.spatFailCount
+  if (!send || send <= 0) return '—'
+  const pct = ((send - fail) / send) * 100
+  if (Number.isNaN(pct)) return '—'
+  return `${pct.toFixed(1)}%`
+})
 
 const historyData = computed(() => {
   const totalWidth = 700;
@@ -172,37 +215,51 @@ const updateChartLabels = () => {
 
 const updateData = async () => {
   updateChartLabels();
-  try {
-    const id = selectedId.value;
-    const [paRes, histRes, ctrlRes, vxRes] = await Promise.all([
-      api.get(`/api/predictive/${id}`),
-      api.get(`/api/predictive/${id}/history`),
-      api.get(`/api/predictive/${id}/controller`),
-      api.get(`/api/predictive/${id}/v2x`),
-    ]);
+  const id = selectedId.value;
+  const results = await Promise.allSettled([
+    api.get(`/api/predictive/${id}`),
+    api.get(`/api/predictive/${id}/history`),
+    api.get(`/api/predictive/${id}/controller`),
+    api.get(`/api/predictive/${id}/v2x`),
+  ]);
 
-    const pa = paRes.data;
+  const [paRes, histRes, ctrlRes, vxRes] = results;
+
+  if (paRes.status === 'fulfilled') {
+    const pa = paRes.value.data;
     riskData.value = {
       total_risk_score: Math.round(pa.total_risk_score || pa.totalRiskScore || 0),
       controller_risk_score: Math.round(pa.controller_risk_score || pa.controllerRiskScore || 0),
       v2x_risk_score: Math.round(pa.v2x_risk_score || pa.v2xRiskScore || 0),
       risk_level: pa.risk_level || pa.riskLevel || '정상',
-      remain_days: pa.remain_days || 15,
-      fail_prob: pa.fail_prob || 5,
+      remain_days: pa.remain_days ?? pa.remainDays ?? 15,
+      fail_prob: pa.fail_prob ?? pa.failProb ?? 5,
       analysis_comment: pa.analysis_comment || pa.analysisComment || '',
     };
+  } else {
+    console.warn('예지보전 분석 API 실패:', paRes.reason);
+  }
 
-    if (histRes.data && histRes.data.length > 0) {
-      // 데이터 강제 교체 (Re-activity 보장)
-      const scores = histRes.data.map(h => h.total_risk_score || h.score || 0);
-      currentHistory.value = scores.length >= 7 ? [...scores.slice(-7)] : [...Array(7 - scores.length).fill(0), ...scores];
-      console.log("실시간 차트 데이터 갱신:", currentHistory.value);
-    }
+  if (histRes.status === 'fulfilled' && histRes.value.data?.length > 0) {
+    const scores = histRes.value.data.map((h) => h.total_risk_score ?? h.score ?? 0);
+    currentHistory.value =
+      scores.length >= 7 ? [...scores.slice(-7)] : [...Array(7 - scores.length).fill(0), ...scores];
+  } else if (histRes.status === 'rejected') {
+    console.warn('위험 히스토리 API 실패:', histRes.reason);
+  }
 
-    controllerLog.value = { ...ctrlRes.data };
-    commLog.value = { ...vxRes.data };
-  } catch (e) {
-    console.warn("API 응답 대기 중 혹은 서버 에러. 더미 데이터를 유지합니다.");
+  if (ctrlRes.status === 'fulfilled') {
+    controllerLog.value = normalizeControllerStatus(ctrlRes.value.data);
+  } else {
+    console.warn('제어기 상태 API 실패:', ctrlRes.reason);
+    controllerLog.value = normalizeControllerStatus(null);
+  }
+
+  if (vxRes.status === 'fulfilled') {
+    commLog.value = normalizeV2xStatus(vxRes.value.data);
+  } else {
+    console.warn('V2X 상태 API 실패:', vxRes.reason);
+    commLog.value = normalizeV2xStatus(null);
   }
 }
 

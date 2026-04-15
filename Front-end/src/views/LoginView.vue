@@ -23,7 +23,9 @@
             <input type="password" v-model="password" placeholder="패스워드를 입력하세요" />
           </div>
 
-          <button type="submit" class="submit-btn">Log in</button>
+          <button type="submit" class="submit-btn" :disabled="loading">
+            {{ loading ? '로그인 중…' : 'Log in' }}
+          </button>
         </form>
 
         <p class="register-footer">
@@ -37,12 +39,15 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { login as loginApi } from '@/api/auth'
+import { setAuthenticated } from '@/auth/session'
 
 const router = useRouter()
 const userId = ref('')
 const password = ref('')
+const loading = ref(false)
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!userId.value.trim()) {
     alert('아이디를 입력해주세요.')
     return
@@ -52,9 +57,19 @@ const handleLogin = () => {
     return
   }
 
-  console.log('Login:', userId.value, password.value)
-
-  router.push('/dashboard')
+  loading.value = true
+  try {
+    await loginApi({
+      loginId: userId.value.trim(),
+      password: password.value,
+    })
+    setAuthenticated(true)
+    await router.push('/dashboard')
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '로그인에 실패했습니다.')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

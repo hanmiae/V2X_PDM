@@ -39,6 +39,7 @@
 <script setup>
 import { ref, provide, onMounted, onUnmounted } from 'vue' // 💡 lifecycle hooks 추가
 import { useRouter } from 'vue-router'
+import { clearAuthenticated } from '@/auth/session'
 
 const router = useRouter()
 const isDarkMode = ref(false)
@@ -78,7 +79,10 @@ const toggleDarkMode = () => {
 }
 
 const handleLogout = () => {
-  if (confirm('로그아웃 하시겠습니까?')) router.push('/')
+  if (confirm('로그아웃 하시겠습니까?')) {
+    clearAuthenticated()
+    router.push('/')
+  }
 }
 </script>
 
