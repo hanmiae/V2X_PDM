@@ -23,8 +23,8 @@ public interface RiskAnalysisResultRepository extends JpaRepository<RiskAnalysis
 
     Optional<RiskAnalysisResult> findTopByIntersectionIdOrderByAnalysisTimeDesc(String intersectionId); // 교차로별 최신 위험도 조회
 
-    // 최근 24시간 위험 점수 조회 (시간순)
-    List<RiskAnalysisResult> findTop7ByIntersectionIdOrderByAnalysisTimeAsc(String intersectionId);
+    // 최근 1시간 위험 점수 조회 (최신 6개)
+    List<RiskAnalysisResult> findTop6ByIntersectionIdOrderByAnalysisTimeDesc(String intersectionId);
 
     // 전체 결과 최신순 조회 (테이블용)
     List<RiskAnalysisResult> findAllByOrderByAnalysisTimeDesc();

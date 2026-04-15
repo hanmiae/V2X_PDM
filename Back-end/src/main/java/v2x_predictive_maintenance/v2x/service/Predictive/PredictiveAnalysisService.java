@@ -7,6 +7,7 @@ import v2x_predictive_maintenance.v2x.dto.Predictive.RiskHistoryDTO;
 import v2x_predictive_maintenance.v2x.entity.Dashboard.RiskAnalysisResult;
 import v2x_predictive_maintenance.v2x.repository.Dashboard.RiskAnalysisResultRepository;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -47,15 +48,22 @@ public class PredictiveAnalysisService {
     // 최근 위험 점수 히스토리 조회 (그래프용)
     public List<RiskHistoryDTO> getRiskHistory(String intersectionId) {
 
-        // 1️⃣ 최근 데이터 조회
+        // 최근 1시간 데이터 조회 (최신 6개)
         List<RiskAnalysisResult> results =
-                riskAnalysisResultRepository.findTop7ByIntersectionIdOrderByAnalysisTimeAsc(intersectionId);
+                riskAnalysisResultRepository
+                        .findTop6ByIntersectionIdOrderByAnalysisTimeDesc(intersectionId);
 
-        // 2️⃣ DTO 변환
+        // 시간순 정렬
+        Collections.reverse(results);
+
+        // DTO 변환
         return results.stream()
                 .map(r -> new RiskHistoryDTO(
-                        r.getAnalysisTime().toLocalTime().toString().substring(0, 5), // 시간 (HH:mm)
-                        r.getTotalRiskScore().doubleValue() // 점수
+                        r.getAnalysisTime()
+                                .toLocalTime()
+                                .toString()
+                                .substring(0, 5),
+                        r.getTotalRiskScore().doubleValue()
                 ))
                 .toList();
     }

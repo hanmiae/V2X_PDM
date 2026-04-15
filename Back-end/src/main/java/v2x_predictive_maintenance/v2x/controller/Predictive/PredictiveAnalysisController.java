@@ -36,6 +36,7 @@ public class PredictiveAnalysisController {
         return predictiveAnalysisService.getRiskHistory(intersectionId);
     }
 
+    // 제어기 상태 조회 API (하단 왼쪽 카드용)
     @GetMapping("/{intersectionId}/controller")
     public ControllerStatusDTO getControllerStatus(
             @PathVariable String intersectionId

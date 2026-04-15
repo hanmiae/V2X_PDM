@@ -8,6 +8,7 @@ import v2x_predictive_maintenance.v2x.dto.V2X.V2XSummaryDTO;
 import v2x_predictive_maintenance.v2x.entity.Dashboard.V2XCommunicationLog;
 import v2x_predictive_maintenance.v2x.repository.Dashboard.V2XCommunicationLogRepository;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -37,11 +38,16 @@ public class V2XService {
 
         List<V2XCommunicationLog> results =
                 v2xCommunicationLogRepository
-                        .findTop7ByIntersectionIdOrderByV2xLogTimeAsc(intersectionId);
+                        .findTop6ByIntersectionIdOrderByV2xLogTimeDesc(intersectionId);
+
+        Collections.reverse(results);
 
         return results.stream()
                 .map(log -> new V2XHistoryDTO(
-                        log.getV2xLogTime().toLocalTime().toString().substring(0, 5),
+                        log.getV2xLogTime()
+                                .toLocalTime()
+                                .toString()
+                                .substring(0, 5),
                         log.getAvgLatencyMs().doubleValue()
                 ))
                 .toList();
