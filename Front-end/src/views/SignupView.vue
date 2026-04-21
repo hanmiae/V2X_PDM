@@ -7,7 +7,7 @@
     <div class="right-panel">
       <div class="login-card-box">
         <h2>Sign up</h2>
-        <div class="divider"><span>Or</span></div>
+        <div class="divider"></div>
         <form @submit.prevent="handleSignup">
           <div class="form-group">
             <label>Employee No (사원번호)</label>

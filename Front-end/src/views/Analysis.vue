@@ -213,16 +213,19 @@ const updateData = async () => {
       api.get(`/api/predictive/${id}/v2x`),
     ]);
 
+    // updateData 함수 내부 수정 예시
     if (paRes.status === 'fulfilled') {
       const pa = paRes.value.data;
       riskData.value = {
+        // Math.round를 사용하여 정수로 깔끔하게 처리
         total_risk_score: Math.round(pa.total_risk_score || pa.totalRiskScore || 0),
         controller_risk_score: Math.round(pa.controller_risk_score || pa.controllerRiskScore || 0),
         v2x_risk_score: Math.round(pa.v2x_risk_score || pa.v2xRiskScore || 0),
-        risk_level: pa.risk_level || pa.riskLevel || '정상',
-        remain_days: pa.remain_days ?? pa.remainDays ?? 15,
-        fail_prob: pa.fail_prob ?? pa.failProb ?? 5,
-        analysis_comment: pa.analysis_comment || pa.analysisComment || '',
+        
+        // 소수점이 필요한 경우 Number.parseFloat()와 toFixed() 조합
+        remain_days: Number(pa.remain_days ?? 15).toFixed(1), 
+        fail_prob: Math.round(pa.fail_prob ?? 5),
+        analysis_comment: pa.analysis_comment || ""
       };
     }
 
