@@ -8,7 +8,7 @@
       <div class="login-card-box">
         <h2>Log in</h2>
 
-        <div class="divider"><span>Or</span></div>
+        <div class="divider"></div>
 
         <form @submit.prevent="handleLogin">
           <div class="form-group">
